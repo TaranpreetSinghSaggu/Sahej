@@ -1,6 +1,6 @@
-export type Verdict = "AUTOPILOT" | "AUTHENTIC";
+export type ReflectionVerdict = "AUTOPILOT" | "AUTHENTIC";
 
-export type PrimaryPattern =
+export type ReflectionPattern =
   | "ego"
   | "venting"
   | "approval_seeking"
@@ -8,16 +8,16 @@ export type PrimaryPattern =
   | "intentional"
   | "grounded";
 
-export type Intensity = 1 | 2 | 3 | 4 | 5;
+export type ReflectionIntensity = 1 | 2 | 3 | 4 | 5;
 
 export interface ReflectRequestBody {
   thought?: unknown;
 }
 
-export interface ReflectionResponse {
-  verdict: Verdict;
-  primaryPattern: PrimaryPattern;
-  intensity: Intensity;
+export interface ReflectionResult {
+  verdict: ReflectionVerdict;
+  primaryPattern: ReflectionPattern;
+  intensity: ReflectionIntensity;
   mirrorLine: string;
   reframePrompt: string;
   dopamineDrain: boolean;

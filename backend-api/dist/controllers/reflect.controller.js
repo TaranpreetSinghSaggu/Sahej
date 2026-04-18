@@ -2,19 +2,40 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.reflect = void 0;
 const error_middleware_1 = require("../middleware/error.middleware");
-const mockReflection = {
-    verdict: "AUTHENTIC",
-    primaryPattern: "grounded",
-    intensity: 2,
-    mirrorLine: "This sounds more reflective than reactive right now.",
-    reframePrompt: "What is the clearest next step you can take with calm intent?",
-    dopamineDrain: false
-};
+const fallbackReflection_1 = require("../utils/fallbackReflection");
+const mockReflection_1 = require("../utils/mockReflection");
+const normalizeThought_1 = require("../utils/normalizeThought");
+const requestValidation_1 = require("../utils/requestValidation");
+const sessionId_1 = require("../utils/sessionId");
+const sessionMemory_1 = require("../utils/sessionMemory");
 const reflect = (req, res, next) => {
-    const { thought } = req.body;
-    if (typeof thought !== "string" || thought.trim().length === 0) {
-        return next(new error_middleware_1.AppError(400, "thought is required and must be a non-empty string"));
+    let trimmedThought;
+    try {
+        trimmedThought = (0, requestValidation_1.getRequiredTrimmedText)(req.body?.thought, "thought");
     }
-    return res.status(200).json(mockReflection);
+    catch (error) {
+        if (error instanceof error_middleware_1.AppError) {
+            return next(error);
+        }
+        return next(error);
+    }
+    try {
+        const normalizedThought = (0, normalizeThought_1.normalizeThought)(trimmedThought);
+        const reflection = (0, mockReflection_1.createMockReflection)(normalizedThought);
+        const sessionId = (0, sessionId_1.getSessionId)(req.headers["x-session-id"]);
+        (0, sessionMemory_1.appendSessionReflectionEvent)(sessionId, {
+            timestamp: new Date().toISOString(),
+            thought: trimmedThought,
+            verdict: reflection.verdict,
+            primaryPattern: reflection.primaryPattern,
+            intensity: reflection.intensity,
+            dopamineDrain: reflection.dopamineDrain
+        });
+        return res.status(200).json(reflection);
+    }
+    catch (error) {
+        console.error("Unexpected reflect fallback", error);
+        return res.status(200).json((0, fallbackReflection_1.fallbackReflection)());
+    }
 };
 exports.reflect = reflect;

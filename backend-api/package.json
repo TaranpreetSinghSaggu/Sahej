@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "verify:reflect": "tsx src/verify-reflect.ts",
+    "verify:backend": "tsx src/verify-backend.ts"
   },
   "engines": {
     "node": ">=18"
