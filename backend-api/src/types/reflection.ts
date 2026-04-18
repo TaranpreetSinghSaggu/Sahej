@@ -14,6 +14,20 @@ export interface ReflectRequestBody {
   thought?: unknown;
 }
 
+export interface EmotionProfile {
+  primaryEmotion: string;
+  secondaryEmotion: string;
+  underlyingNeed: string;
+  bodyColor: string;
+  colorName: string;
+  explanation: string;
+}
+
+export interface JournalEntry {
+  summary: string;
+  awarenessPrompt: string;
+}
+
 export interface ReflectionResult {
   verdict: ReflectionVerdict;
   primaryPattern: ReflectionPattern;
@@ -21,4 +35,6 @@ export interface ReflectionResult {
   mirrorLine: string;
   reframePrompt: string;
   dopamineDrain: boolean;
+  emotionProfile: EmotionProfile;
+  journalEntry: JournalEntry;
 }

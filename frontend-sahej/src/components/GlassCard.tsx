@@ -20,23 +20,33 @@ export function GlassCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 24,
+    borderRadius: 26,
     borderWidth: 1,
     padding: spacing.lg,
     shadowOffset: {
       width: 0,
-      height: 14
+      height: 16
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 28,
-    elevation: 8
+    shadowOpacity: 0.22,
+    shadowRadius: 34,
+    elevation: 10
   }
 });
 
 function createCardStyle(theme: AppTheme): ViewStyle {
+  const isLightSurface = theme.background.startsWith("#f");
+
   return {
     backgroundColor: theme.card,
     borderColor: theme.border,
-    shadowColor: theme.shadow
+    shadowColor: theme.shadow,
+    ...(isLightSurface
+      ? {
+          borderWidth: 1,
+          shadowOpacity: 0.14
+        }
+      : {
+          shadowOpacity: 0.24
+        })
   };
 }

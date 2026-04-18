@@ -15,40 +15,17 @@ interface AccelerometerReading {
 const SENSOR_INTERVAL_MS = 200;
 const MOVEMENT_THRESHOLD = 0.7;
 const RESET_COOLDOWN_MS = 900;
-const MESSAGE_DURATION_MS = 1800;
 
 export function useStillnessGate({
   enabled,
   onStillnessBreak
 }: UseStillnessGateOptions) {
-  const [message, setMessage] = useState<string | null>(null);
   const [isSupported, setIsSupported] = useState(true);
   const previousReadingRef = useRef<AccelerometerReading | null>(null);
   const cooldownUntilRef = useRef(0);
-  const messageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stillnessBreakRef = useRef(onStillnessBreak);
 
   stillnessBreakRef.current = onStillnessBreak;
-
-  const showMessage = useCallback((value: string) => {
-    setMessage(value);
-
-    if (messageTimeoutRef.current) {
-      clearTimeout(messageTimeoutRef.current);
-    }
-
-    messageTimeoutRef.current = setTimeout(() => {
-      setMessage(null);
-    }, MESSAGE_DURATION_MS);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (messageTimeoutRef.current) {
-        clearTimeout(messageTimeoutRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (!enabled) {
@@ -100,7 +77,6 @@ export function useStillnessGate({
           cooldownUntilRef.current = Date.now() + RESET_COOLDOWN_MS;
           previousReadingRef.current = null;
           stillnessBreakRef.current();
-          showMessage("Stillness broken. Begin again.");
         });
       } catch {
         if (isMounted) {
@@ -116,10 +92,9 @@ export function useStillnessGate({
       previousReadingRef.current = null;
       subscription?.remove();
     };
-  }, [enabled, showMessage]);
+  }, [enabled]);
 
   return {
-    isSupported,
-    message
+    isSupported
   };
 }

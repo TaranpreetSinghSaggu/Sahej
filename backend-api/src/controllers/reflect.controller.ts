@@ -2,6 +2,9 @@ import { RequestHandler } from "express";
 
 import { AppError } from "../middleware/error.middleware";
 import { fallbackReflection } from "../utils/fallbackReflection";
+import { generateReflectionWithGemini } from "../lib/gemini";
+import { generateReflectionWithOpenAI } from "../lib/openai";
+import { env } from "../lib/env";
 import { createMockReflection } from "../utils/mockReflection";
 import { normalizeThought } from "../utils/normalizeThought";
 import { getRequiredTrimmedText } from "../utils/requestValidation";
@@ -9,32 +12,56 @@ import { getSessionId } from "../utils/sessionId";
 import { appendSessionReflectionEvent } from "../utils/sessionMemory";
 import { ReflectionResult, ReflectRequestBody } from "../types/reflection";
 
-const MAX_THOUGHT_LENGTH = 1000;
+type EnrichmentAttempt =
+  | { type: "success"; reflection: ReflectionResult }
+  | { type: "failed"; error: unknown }
+  | { type: "timeout" };
+
+async function runEnrichmentAttempt(
+  providerName: "OpenAI" | "Gemini",
+  budgetMs: number,
+  task: () => Promise<ReflectionResult>
+): Promise<EnrichmentAttempt> {
+  console.info(`Reflect ${providerName} enrichment started`);
+  let timeoutId: NodeJS.Timeout | undefined;
+  const result = await Promise.race<EnrichmentAttempt>([
+    (async () => {
+      try {
+        const enrichedReflection = await task();
+        return {
+          type: "success" as const,
+          reflection: enrichedReflection
+        };
+      } catch (error) {
+        return {
+          type: "failed" as const,
+          error
+        };
+      }
+    })(),
+    new Promise<{ type: "timeout" }>((resolve) => {
+      timeoutId = setTimeout(() => {
+        resolve({
+          type: "timeout"
+        });
+      }, budgetMs);
+    })
+  ]);
+
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+  }
+
+  return result;
+}
 
 export const reflect: RequestHandler<
   Record<string, never>,
   ReflectionResult,
   ReflectRequestBody
-> = (req, res, next) => {
+> = async (req, res, next) => {
   let trimmedThought: string;
 
-<<<<<<< HEAD
-  if (typeof thought !== "string") {
-    return next(new AppError(400, "thought is required and must be a non-empty string"));
-  }
-
-  const trimmedThought = thought.trim();
-
-  if (trimmedThought.length === 0) {
-    return next(new AppError(400, "thought is required and must be a non-empty string"));
-  }
-
-  if (trimmedThought.length > MAX_THOUGHT_LENGTH) {
-    return next(new AppError(400, "thought must be 1000 characters or fewer"));
-  }
-
-  return res.status(200).json(mockReflection);
-=======
   try {
     trimmedThought = getRequiredTrimmedText(req.body?.thought, "thought");
   } catch (error) {
@@ -47,7 +74,50 @@ export const reflect: RequestHandler<
 
   try {
     const normalizedThought = normalizeThought(trimmedThought);
-    const reflection = createMockReflection(normalizedThought);
+    // Deterministic reflection is always ready first; AI enrichment is optional.
+    const baseReflection = createMockReflection(normalizedThought);
+    console.info("Reflect local reflection created");
+    let reflection = baseReflection;
+
+    if (env.demoMode) {
+      console.info("Reflect demo mode enabled. Returning deterministic reflection.");
+    } else if (trimmedThought) {
+      // Enrichment is best-effort only; the demo flow must never depend on any external model.
+      const openAIResult = await runEnrichmentAttempt(
+        "OpenAI",
+        env.openaiBestEffortBudgetMs,
+        () => generateReflectionWithOpenAI(trimmedThought, baseReflection)
+      );
+
+      if (openAIResult.type === "success") {
+        reflection = openAIResult.reflection;
+      } else {
+        if (openAIResult.type === "timeout") {
+          console.warn(
+            `Reflect OpenAI enrichment timed out after ${env.openaiBestEffortBudgetMs}ms budget.`
+          );
+        } else {
+          console.warn("Reflect OpenAI enrichment failed.", openAIResult.error);
+        }
+
+        const geminiResult = await runEnrichmentAttempt(
+          "Gemini",
+          env.geminiBestEffortBudgetMs,
+          () => generateReflectionWithGemini(trimmedThought, baseReflection)
+        );
+
+        if (geminiResult.type === "success") {
+          reflection = geminiResult.reflection;
+        } else if (geminiResult.type === "timeout") {
+          console.warn(
+            `Reflect Gemini enrichment timed out after ${env.geminiBestEffortBudgetMs}ms budget.`
+          );
+        } else {
+          console.warn("Reflect Gemini enrichment failed.", geminiResult.error);
+        }
+      }
+    }
+
     const sessionId = getSessionId(req.headers["x-session-id"]);
 
     appendSessionReflectionEvent(sessionId, {
@@ -59,11 +129,10 @@ export const reflect: RequestHandler<
       dopamineDrain: reflection.dopamineDrain
     });
 
+    console.info("Reflect response returned");
     return res.status(200).json(reflection);
   } catch (error) {
     console.error("Unexpected reflect fallback", error);
-
     return res.status(200).json(fallbackReflection());
   }
->>>>>>> main
 };

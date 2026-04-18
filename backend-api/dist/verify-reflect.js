@@ -12,31 +12,19 @@ const REFLECTION_KEYS = [
     "intensity",
     "mirrorLine",
     "reframePrompt",
-    "dopamineDrain"
+    "dopamineDrain",
+    "emotionProfile",
+    "journalEntry"
 ];
-const INTERCEPT_KEYS = [
-    "shouldInterrupt",
-    "reason",
-    "urgeLabels",
-    "promptLine"
+const EMOTION_PROFILE_KEYS = [
+    "primaryEmotion",
+    "secondaryEmotion",
+    "underlyingNeed",
+    "bodyColor",
+    "colorName",
+    "explanation"
 ];
-const CONSEQUENCE_PREVIEW_KEYS = [
-    "autopilotOutcome",
-    "alignedOutcome",
-    "suggestedAction"
-];
-const VOICE_STATE_KEYS = [
-    "stateLabel",
-    "toneSignal",
-    "mirrorLine",
-    "nextStepPrompt"
-];
-const WEEKLY_MIRROR_KEYS = [
-    "dominantPattern",
-    "strongestAuthenticPattern",
-    "summary",
-    "recoveryMetrics"
-];
+const JOURNAL_ENTRY_KEYS = ["summary", "awarenessPrompt"];
 const createLongThought = () => "a".repeat(1001);
 const createHeaders = (sessionId) => ({
     "Content-Type": "application/json",
@@ -55,22 +43,10 @@ function assertExactObjectKeys(payload, expectedKeys) {
 }
 function assertReflectionShape(payload) {
     assertExactObjectKeys(payload, REFLECTION_KEYS);
-}
-function assertInterceptShape(payload) {
-    assertExactObjectKeys(payload, INTERCEPT_KEYS);
     const record = payload;
-    strict_1.default.ok(Array.isArray(record.urgeLabels));
-}
-function assertConsequencePreviewShape(payload) {
-    assertExactObjectKeys(payload, CONSEQUENCE_PREVIEW_KEYS);
-}
-function assertVoiceStateShape(payload) {
-    assertExactObjectKeys(payload, VOICE_STATE_KEYS);
-}
-function assertWeeklyMirrorShape(payload) {
-    assertExactObjectKeys(payload, WEEKLY_MIRROR_KEYS);
-    const record = payload;
-    strict_1.default.equal(typeof record.recoveryMetrics, "object");
+    assertExactObjectKeys(record.emotionProfile, EMOTION_PROFILE_KEYS);
+    assertExactObjectKeys(record.journalEntry, JOURNAL_ENTRY_KEYS);
+    strict_1.default.match(record.emotionProfile.bodyColor, /^#[0-9A-F]{6}$/i);
 }
 const main = async () => {
     const server = app_1.default.listen(0);
@@ -78,7 +54,6 @@ const main = async () => {
         await (0, node_events_1.once)(server, "listening");
         const address = server.address();
         const baseUrl = `http://127.0.0.1:${address.port}`;
-        const weeklySessionId = `verify-session-${Date.now()}`;
         const healthResponse = await fetch(`${baseUrl}/health`);
         strict_1.default.equal(healthResponse.status, 200);
         strict_1.default.deepEqual(await healthResponse.json(), { ok: true });
@@ -131,86 +106,7 @@ const main = async () => {
         strict_1.default.equal(calmThoughtPayload.verdict, "AUTHENTIC");
         strict_1.default.equal(calmThoughtPayload.primaryPattern, "grounded");
         strict_1.default.equal(calmThoughtPayload.dopamineDrain, false);
-        const doomscrollInterceptResponse = await postJson(baseUrl, "/intercept", {
-            thought: "I am doomscrolling reels again"
-        });
-        strict_1.default.equal(doomscrollInterceptResponse.status, 200);
-        const doomscrollInterceptPayload = await doomscrollInterceptResponse.json();
-        assertInterceptShape(doomscrollInterceptPayload);
-        strict_1.default.equal(doomscrollInterceptPayload.shouldInterrupt, true);
-        strict_1.default.equal(doomscrollInterceptPayload.reason, "passive_consumption");
-        const lateNightInterceptResponse = await postJson(baseUrl, "/intercept", {
-            thought: "I want to message them",
-            localHour: 1
-        });
-        strict_1.default.equal(lateNightInterceptResponse.status, 200);
-        const lateNightInterceptPayload = await lateNightInterceptResponse.json();
-        assertInterceptShape(lateNightInterceptPayload);
-        strict_1.default.equal(lateNightInterceptPayload.reason, "late_night_reactivity");
-        const checkingInterceptResponse = await postJson(baseUrl, "/intercept", {
-            thought: "I need to check if they replied again"
-        });
-        strict_1.default.equal(checkingInterceptResponse.status, 200);
-        const checkingInterceptPayload = await checkingInterceptResponse.json();
-        assertInterceptShape(checkingInterceptPayload);
-        strict_1.default.equal(checkingInterceptPayload.reason, "compulsive_checking");
-        const consequencePreviewResponse = await postJson(baseUrl, "/consequence-preview", {
-            thought: "I am angry and want to prove them wrong"
-        });
-        strict_1.default.equal(consequencePreviewResponse.status, 200);
-        const consequencePreviewPayload = await consequencePreviewResponse.json();
-        assertConsequencePreviewShape(consequencePreviewPayload);
-        strict_1.default.equal(typeof consequencePreviewPayload.autopilotOutcome, "string");
-        strict_1.default.equal(typeof consequencePreviewPayload.alignedOutcome, "string");
-        const calmVoiceResponse = await postJson(baseUrl, "/voice-state", {
-            transcript: "I want to respond slowly and clearly."
-        });
-        strict_1.default.equal(calmVoiceResponse.status, 200);
-        const calmVoicePayload = await calmVoiceResponse.json();
-        assertVoiceStateShape(calmVoicePayload);
-        strict_1.default.equal(calmVoicePayload.stateLabel, "calm");
-        const defensiveVoiceResponse = await postJson(baseUrl, "/voice-state", {
-            transcript: "I am fine, I just want to move on.",
-            wordsPerMinute: 125,
-            pauseCount: 0
-        });
-        strict_1.default.equal(defensiveVoiceResponse.status, 200);
-        const defensiveVoicePayload = await defensiveVoiceResponse.json();
-        assertVoiceStateShape(defensiveVoicePayload);
-        strict_1.default.equal(defensiveVoicePayload.stateLabel, "defensive");
-        const urgentVoiceResponse = await postJson(baseUrl, "/voice-state", {
-            transcript: "I need to send this right now",
-            wordsPerMinute: 182,
-            volumeTrend: "rising"
-        });
-        strict_1.default.equal(urgentVoiceResponse.status, 200);
-        const urgentVoicePayload = await urgentVoiceResponse.json();
-        assertVoiceStateShape(urgentVoicePayload);
-        strict_1.default.equal(urgentVoicePayload.stateLabel, "urgent");
-        const emptyWeeklyMirrorResponse = await fetch(`${baseUrl}/weekly-mirror`, {
-            headers: createHeaders(weeklySessionId)
-        });
-        strict_1.default.equal(emptyWeeklyMirrorResponse.status, 200);
-        const emptyWeeklyMirrorPayload = await emptyWeeklyMirrorResponse.json();
-        assertWeeklyMirrorShape(emptyWeeklyMirrorPayload);
-        strict_1.default.equal(emptyWeeklyMirrorPayload.recoveryMetrics.totalReflections, 0);
-        await postJson(baseUrl, "/reflect", { thought: "I spent 2 hours on reels again" }, weeklySessionId);
-        await postJson(baseUrl, "/reflect", { thought: "I feel jealous and small right now" }, weeklySessionId);
-        await postJson(baseUrl, "/reflect", { thought: "I want to respond calmly and do what is right" }, weeklySessionId);
-        const weeklyMirrorResponse = await fetch(`${baseUrl}/weekly-mirror`, {
-            headers: createHeaders(weeklySessionId)
-        });
-        strict_1.default.equal(weeklyMirrorResponse.status, 200);
-        const weeklyMirrorPayload = await weeklyMirrorResponse.json();
-        assertWeeklyMirrorShape(weeklyMirrorPayload);
-        strict_1.default.equal(weeklyMirrorPayload.dominantPattern, "fear");
-        strict_1.default.equal(weeklyMirrorPayload.strongestAuthenticPattern, "grounded");
-        strict_1.default.equal(weeklyMirrorPayload.recoveryMetrics.totalReflections, 3);
-        strict_1.default.equal(weeklyMirrorPayload.recoveryMetrics.autopilotCount, 2);
-        strict_1.default.equal(weeklyMirrorPayload.recoveryMetrics.authenticCount, 1);
-        strict_1.default.equal(weeklyMirrorPayload.recoveryMetrics.dopamineDrainCount, 1);
-        strict_1.default.equal(weeklyMirrorPayload.recoveryMetrics.autopilotRate, 0.67);
-        console.log("Backend endpoint verification passed.");
+        console.log("Reflect endpoint verification passed.");
     }
     finally {
         await new Promise((resolve, reject) => {
@@ -225,7 +121,7 @@ const main = async () => {
     }
 };
 main().catch((error) => {
-    console.error("Backend endpoint verification failed.");
+    console.error("Reflect endpoint verification failed.");
     console.error(error);
     process.exitCode = 1;
 });

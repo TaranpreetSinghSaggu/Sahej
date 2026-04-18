@@ -1,38 +1,65 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const LOCK_DURATION_SECONDS = 3;
 
 export function useSahajLock() {
   const [secondsLeft, setSecondsLeft] = useState(LOCK_DURATION_SECONDS);
-  const [cycle, setCycle] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const reset = useCallback(() => {
-    setCycle((value) => value + 1);
+  const clearTimer = useCallback(() => {
+    if (!timerRef.current) {
+      return;
+    }
+
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
   }, []);
 
-  useEffect(() => {
+  const start = useCallback(() => {
+    clearTimer();
+    setSecondsLeft((current) => (current === 0 ? LOCK_DURATION_SECONDS : current));
+    setIsRunning(true);
+  }, [clearTimer]);
+
+  const stop = useCallback(() => {
+    clearTimer();
+    setIsRunning(false);
+  }, [clearTimer]);
+
+  const reset = useCallback(() => {
+    clearTimer();
     setSecondsLeft(LOCK_DURATION_SECONDS);
+    setIsRunning(false);
+  }, [clearTimer]);
 
-    const timer = setInterval(() => {
-      setSecondsLeft((current) => {
-        if (current <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
+  useEffect(() => {
+    if (!isRunning) {
+      clearTimer();
+      return;
+    }
 
-        return current - 1;
-      });
+    if (secondsLeft <= 0) {
+      clearTimer();
+      setIsRunning(false);
+      return;
+    }
+
+    timerRef.current = setTimeout(() => {
+      setSecondsLeft((current) => Math.max(current - 1, 0));
     }, 1000);
 
     return () => {
-      clearInterval(timer);
+      clearTimer();
     };
-  }, [cycle]);
+  }, [clearTimer, isRunning, secondsLeft]);
 
   return {
     secondsLeft,
-    isRunning: secondsLeft > 0,
+    isRunning,
     isComplete: secondsLeft === 0,
+    start,
+    stop,
     reset
   };
 }

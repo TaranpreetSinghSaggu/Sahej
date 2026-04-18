@@ -1,75 +1,210 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { CalmInterventionOverlay } from "../src/components/CalmInterventionOverlay";
 import { GlassCard } from "../src/components/GlassCard";
 import { LockCountdown } from "../src/components/LockCountdown";
 import { copy } from "../src/constants/copy";
+import { startCalmHeartbeat } from "../src/features/haptics/startCalmHeartbeat";
 import { useSahajLock } from "../src/features/lock/useSahajLock";
 import { reflectThought } from "../src/features/reflection/api";
 import { fallbackReflectionResult } from "../src/features/reflection/mock";
 import { useStillnessGate } from "../src/features/stillness/useStillnessGate";
-import { setLatestReflection } from "../src/lib/latestReflection";
+import { appendJournalEntry } from "../src/lib/journalStore";
+import { LatestReflectionState, setLatestReflection } from "../src/lib/latestReflection";
 import { getRouteText } from "../src/lib/routeParams";
 import { spacing } from "../src/theme/spacing";
-import { defaultTheme } from "../src/theme/theme";
+import { useThemePreference } from "../src/theme/ThemeProvider";
 import { typography } from "../src/theme/typography";
+
+const CALM_INTERVENTION_MS = 2_400;
+const REFLECTION_TIMEOUT_MS = 5_000;
 
 export default function ReflectScreen() {
   const params = useLocalSearchParams<{ thought?: string | string[] }>();
   const thought = getRouteText(params.thought).trim();
   const [isRequesting, setIsRequesting] = useState(false);
+  const [isCalming, setIsCalming] = useState(false);
+  const isScreenMountedRef = useRef(true);
   const requestStartedRef = useRef(false);
-  const { secondsLeft, isRunning, isComplete, reset } = useSahajLock();
-  const { isSupported, message } = useStillnessGate({
-    enabled: Boolean(thought) && isRunning && !isRequesting,
-    onStillnessBreak: reset
-  });
+  const navigationHandledRef = useRef(false);
+  const calmRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopCalmHeartbeatRef = useRef<(() => void) | null>(null);
+  const { secondsLeft, isRunning, isComplete, reset, start, stop } = useSahajLock();
+  const { theme, statusBarStyle } = useThemePreference();
 
   const hasThought = thought.length > 0;
-  const helperText = useMemo(() => {
-    if (message) {
-      return message;
+
+  const clearCalmRestartTimeout = useCallback(() => {
+    if (!calmRestartTimeoutRef.current) {
+      return;
     }
 
-    if (!isSupported) {
-      return copy.reflect.unsupportedSensors;
+    clearTimeout(calmRestartTimeoutRef.current);
+    calmRestartTimeoutRef.current = null;
+  }, []);
+
+  const handleStillnessBreak = useCallback(() => {
+    if (!hasThought || isRequesting || isCalming) {
+      return;
     }
 
-    return null;
-  }, [isSupported, message]);
+    stop();
+    reset();
+    setIsCalming(true);
+  }, [hasThought, isCalming, isRequesting, reset, stop]);
+
+  const { isSupported } = useStillnessGate({
+    enabled: hasThought && isRunning && !isRequesting && !isCalming,
+    onStillnessBreak: handleStillnessBreak
+  });
 
   useEffect(() => {
-    if (!hasThought || !isComplete || requestStartedRef.current) {
+    if (!isCalming) {
+      return;
+    }
+
+    stopCalmHeartbeatRef.current?.();
+    stopCalmHeartbeatRef.current = startCalmHeartbeat({
+      durationMs: CALM_INTERVENTION_MS,
+      intervalMs: 760
+    });
+    console.log("[sahej:haptics] calm overlay visible");
+
+    clearCalmRestartTimeout();
+    calmRestartTimeoutRef.current = setTimeout(() => {
+      calmRestartTimeoutRef.current = null;
+      setIsCalming(false);
+      reset();
+      start();
+    }, CALM_INTERVENTION_MS);
+
+    return () => {
+      stopCalmHeartbeatRef.current?.();
+      stopCalmHeartbeatRef.current = null;
+      clearCalmRestartTimeout();
+    };
+  }, [clearCalmRestartTimeout, isCalming, reset, start]);
+
+  const finishReflection = useCallback(
+    async (reflection: LatestReflectionState) => {
+      if (!isScreenMountedRef.current || navigationHandledRef.current) {
+        return;
+      }
+
+      navigationHandledRef.current = true;
+      setLatestReflection(reflection);
+      setIsRequesting(false);
+
+      await appendJournalEntry({
+        source: "reflection",
+        originalThought: thought,
+        verdict: reflection.result.verdict,
+        primaryPattern: reflection.result.primaryPattern,
+        intensity: reflection.result.intensity,
+        mirrorLine: reflection.result.mirrorLine,
+        reframePrompt: reflection.result.reframePrompt,
+        dopamineDrain: reflection.result.dopamineDrain,
+        emotionProfile: reflection.result.emotionProfile,
+        journalEntry: reflection.result.journalEntry
+      });
+
+      if (!isScreenMountedRef.current) {
+        return;
+      }
+
+      router.replace({
+        pathname: "/result",
+        params: {
+          thought
+        }
+      });
+    },
+    [thought]
+  );
+
+  useEffect(() => {
+    isScreenMountedRef.current = true;
+    requestStartedRef.current = false;
+    navigationHandledRef.current = false;
+    setIsRequesting(false);
+    setIsCalming(false);
+    clearCalmRestartTimeout();
+    stop();
+    reset();
+
+    if (hasThought) {
+      start();
+    }
+  }, [clearCalmRestartTimeout, hasThought, reset, start, stop, thought]);
+
+  useEffect(() => {
+    return () => {
+      isScreenMountedRef.current = false;
+      stopCalmHeartbeatRef.current?.();
+      stopCalmHeartbeatRef.current = null;
+      clearCalmRestartTimeout();
+      stop();
+    };
+  }, [clearCalmRestartTimeout, stop]);
+
+  useEffect(() => {
+    if (!hasThought || !isComplete || isCalming || requestStartedRef.current) {
       return;
     }
 
     let isActive = true;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const abortController =
+      typeof AbortController === "function" ? new AbortController() : null;
 
     requestStartedRef.current = true;
     setIsRequesting(true);
 
+    const clearRequestTimeout = () => {
+      if (!timeoutId) {
+        return;
+      }
+
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    };
+
+    const completeReflection = async (reflection: LatestReflectionState) => {
+      clearRequestTimeout();
+
+      if (!isActive) {
+        return;
+      }
+
+      await finishReflection(reflection);
+    };
+
+    timeoutId = setTimeout(() => {
+      abortController?.abort();
+      void completeReflection({
+        thought,
+        result: fallbackReflectionResult,
+        isFallback: true,
+        errorMessage:
+          "The reflection service took too long to respond. A safe fallback reflection is shown."
+      });
+    }, REFLECTION_TIMEOUT_MS);
+
     const runReflection = async () => {
       try {
-        const result = await reflectThought(thought);
+        const result = await reflectThought(thought, abortController?.signal);
 
-        if (!isActive) {
-          return;
-        }
-
-        setLatestReflection({
+        await completeReflection({
           thought,
           result,
           isFallback: false
         });
       } catch (error) {
-        if (!isActive) {
-          return;
-        }
-
-        setLatestReflection({
+        await completeReflection({
           thought,
           result: fallbackReflectionResult,
           isFallback: true,
@@ -78,56 +213,52 @@ export default function ReflectScreen() {
               ? error.message
               : "The reflection service could not be reached."
         });
-      } finally {
-        if (!isActive) {
-          return;
-        }
-
-        setIsRequesting(false);
-        router.replace({
-          pathname: "/result",
-          params: {
-            thought
-          }
-        });
       }
     };
 
-    runReflection();
+    void runReflection();
 
     return () => {
       isActive = false;
+      clearRequestTimeout();
+      abortController?.abort();
     };
-  }, [hasThought, isComplete, thought]);
+  }, [finishReflection, hasThought, isCalming, isComplete, thought]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" />
-      <View pointerEvents="none" style={styles.aura} />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={statusBarStyle} />
+      <View pointerEvents="none" style={[styles.aura, { backgroundColor: theme.aura }]} />
       <View style={styles.container}>
-        <Text style={styles.eyebrow}>{copy.reflect.eyebrow}</Text>
-        <Text style={styles.title}>{copy.reflect.title}</Text>
-        <Text style={styles.subtitle}>{copy.reflect.subtitle}</Text>
+        <Text style={[styles.eyebrow, { color: theme.textMuted }]}>{copy.reflect.eyebrow}</Text>
+        <Text style={[styles.title, { color: theme.textPrimary }]}>{copy.reflect.title}</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{copy.reflect.subtitle}</Text>
 
         {!hasThought ? (
-          <GlassCard theme={defaultTheme}>
-            <Text style={styles.sectionLabel}>{copy.reflect.missingThoughtTitle}</Text>
-            <Text style={styles.thoughtText}>{copy.reflect.missingThoughtBody}</Text>
+          <GlassCard theme={theme}>
+            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>
+              {copy.reflect.missingThoughtTitle}
+            </Text>
+            <Text style={[styles.thoughtText, { color: theme.textPrimary }]}>
+              {copy.reflect.missingThoughtBody}
+            </Text>
           </GlassCard>
         ) : (
           <LockCountdown
             count={isRequesting ? undefined : String(secondsLeft)}
-            helperText={helperText}
+            helperText={!isSupported ? copy.reflect.unsupportedSensors : null}
             isLoading={isRequesting}
             label={isRequesting ? copy.reflect.listeningLabel : copy.reflect.countdownLabel}
-            theme={defaultTheme}
+            theme={theme}
           />
         )}
 
         {hasThought ? (
-          <GlassCard theme={defaultTheme}>
-            <Text style={styles.sectionLabel}>{copy.shared.capturedThought}</Text>
-            <Text style={styles.thoughtText}>{thought}</Text>
+          <GlassCard theme={theme}>
+            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>
+              {copy.shared.capturedThought}
+            </Text>
+            <Text style={[styles.thoughtText, { color: theme.textPrimary }]}>{thought}</Text>
           </GlassCard>
         ) : null}
 
@@ -136,20 +267,28 @@ export default function ReflectScreen() {
             onPress={() => {
               router.replace("/");
             }}
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: theme.accent }]}
           >
-            <Text style={styles.primaryButtonText}>{copy.reflect.missingThoughtAction}</Text>
+            <Text style={[styles.primaryButtonText, { color: theme.textPrimary }]}>
+              {copy.reflect.missingThoughtAction}
+            </Text>
           </Pressable>
         ) : null}
       </View>
+
+      <CalmInterventionOverlay
+        body={copy.reflect.stillnessBody}
+        title={copy.reflect.stillnessTitle}
+        theme={theme}
+        visible={isCalming}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
-    flex: 1,
-    backgroundColor: defaultTheme.background
+    flex: 1
   },
   container: {
     flex: 1,
@@ -158,7 +297,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxl
   },
   eyebrow: {
-    color: defaultTheme.textMuted,
     fontSize: typography.caption.fontSize,
     fontWeight: typography.caption.fontWeight,
     letterSpacing: 2,
@@ -166,19 +304,16 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   title: {
-    color: defaultTheme.textPrimary,
     fontSize: typography.title.fontSize,
     fontWeight: typography.title.fontWeight,
     marginBottom: spacing.sm
   },
   subtitle: {
-    color: defaultTheme.textSecondary,
     fontSize: typography.body.fontSize,
     lineHeight: typography.body.lineHeight,
     marginBottom: spacing.xl
   },
   sectionLabel: {
-    color: defaultTheme.textMuted,
     fontSize: typography.caption.fontSize,
     fontWeight: typography.caption.fontWeight,
     letterSpacing: 1,
@@ -186,20 +321,17 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   thoughtText: {
-    color: defaultTheme.textPrimary,
     fontSize: typography.body.fontSize,
     lineHeight: typography.body.lineHeight
   },
   primaryButton: {
     alignItems: "center",
-    backgroundColor: defaultTheme.accent,
     borderRadius: 18,
     marginTop: spacing.xl,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md
   },
   primaryButtonText: {
-    color: defaultTheme.textPrimary,
     fontSize: typography.button.fontSize,
     fontWeight: typography.button.fontWeight,
     letterSpacing: typography.button.letterSpacing
@@ -210,7 +342,6 @@ const styles = StyleSheet.create({
     right: -120,
     width: 320,
     height: 320,
-    borderRadius: 999,
-    backgroundColor: defaultTheme.aura
+    borderRadius: 999
   }
 });

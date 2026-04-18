@@ -8,10 +8,11 @@ import { GlassCard } from "../src/components/GlassCard";
 import { MirrorResultCard } from "../src/components/MirrorResultCard";
 import { copy } from "../src/constants/copy";
 import { triggerReflectionHaptic } from "../src/features/haptics/triggerReflectionHaptic";
+import { getShiftTechniques } from "../src/features/reflection/techniques";
 import { clearLatestReflection, getLatestReflection } from "../src/lib/latestReflection";
 import { getRouteText } from "../src/lib/routeParams";
 import { spacing } from "../src/theme/spacing";
-import { defaultTheme, drainedTheme } from "../src/theme/theme";
+import { useThemePreference } from "../src/theme/ThemeProvider";
 import { typography } from "../src/theme/typography";
 
 export default function ResultScreen() {
@@ -19,13 +20,19 @@ export default function ResultScreen() {
   const thought = getRouteText(params.thought).trim();
   const latestReflection = getLatestReflection();
   const hapticTriggeredRef = useRef(false);
+  const { getTheme, statusBarStyle } = useThemePreference();
   const theme = useMemo(() => {
-    if (latestReflection?.result.dopamineDrain) {
-      return drainedTheme;
+    return getTheme({
+      dopamineDrain: latestReflection?.result.dopamineDrain
+    });
+  }, [getTheme, latestReflection?.result.dopamineDrain]);
+  const techniques = useMemo(() => {
+    if (!latestReflection) {
+      return null;
     }
 
-    return defaultTheme;
-  }, [latestReflection?.result.dopamineDrain]);
+    return getShiftTechniques(latestReflection.result);
+  }, [latestReflection]);
 
   useEffect(() => {
     if (!latestReflection || hapticTriggeredRef.current) {
@@ -33,7 +40,14 @@ export default function ResultScreen() {
     }
 
     hapticTriggeredRef.current = true;
-    triggerReflectionHaptic(latestReflection.result.verdict);
+    const triggerId = setTimeout(() => {
+      console.log("[sahej:haptics] result screen haptic dispatch");
+      void triggerReflectionHaptic(latestReflection.result);
+    }, 120);
+
+    return () => {
+      clearTimeout(triggerId);
+    };
   }, [latestReflection]);
 
   const handleBackHome = () => {
@@ -43,8 +57,9 @@ export default function ResultScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={statusBarStyle} />
       <View pointerEvents="none" style={[styles.auraTop, { backgroundColor: theme.auraSoft }]} />
+      <View pointerEvents="none" style={[styles.auraBottom, { backgroundColor: theme.aura }]} />
       <ScrollView bounces={false} contentContainerStyle={styles.content}>
         <Text style={[styles.eyebrow, { color: theme.textMuted }]}>{copy.result.eyebrow}</Text>
         <Text style={[styles.title, { color: theme.textPrimary }]}>{copy.result.title}</Text>
@@ -84,14 +99,42 @@ export default function ResultScreen() {
           </GlassCard>
         )}
 
-        <Pressable
-          onPress={handleBackHome}
-          style={[styles.secondaryButton, { borderColor: theme.borderStrong }]}
-        >
-          <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
-            {copy.result.primaryAction}
-          </Text>
-        </Pressable>
+        {techniques ? (
+          <GlassCard style={styles.techniquesCard} theme={theme}>
+            <Text style={[styles.sectionLabel, { color: theme.textMuted }]}>Shift techniques</Text>
+            <Text style={[styles.techniquesTitle, { color: theme.textPrimary }]}>{techniques.title}</Text>
+            <Text style={[styles.techniquesSubtitle, { color: theme.textSecondary }]}>
+              {techniques.subtitle}
+            </Text>
+            {techniques.techniques.map((technique) => (
+              <Text key={technique} style={[styles.techniqueItem, { color: theme.textPrimary }]}>
+                - {technique}
+              </Text>
+            ))}
+          </GlassCard>
+        ) : null}
+
+        <View style={styles.actionsRow}>
+          <Pressable
+            onPress={handleBackHome}
+            style={[styles.secondaryButton, styles.secondaryButtonLeft, { borderColor: theme.borderStrong }]}
+          >
+            <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+              {copy.result.primaryAction}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              router.push("/journal");
+            }}
+            style={[styles.secondaryButton, { borderColor: theme.borderStrong }]}
+          >
+            <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+              {copy.result.journalAction}
+            </Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -129,6 +172,9 @@ const styles = StyleSheet.create({
   thoughtCard: {
     marginBottom: spacing.lg
   },
+  techniquesCard: {
+    marginTop: spacing.lg
+  },
   sectionLabel: {
     fontSize: typography.caption.fontSize,
     fontWeight: typography.caption.fontWeight,
@@ -140,16 +186,38 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     lineHeight: typography.body.lineHeight
   },
+  techniquesTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: spacing.xs
+  },
+  techniquesSubtitle: {
+    fontSize: typography.body.fontSize,
+    lineHeight: typography.body.lineHeight,
+    marginBottom: spacing.sm
+  },
+  techniqueItem: {
+    fontSize: typography.body.fontSize,
+    lineHeight: typography.body.lineHeight,
+    marginBottom: spacing.xs
+  },
   secondaryButton: {
     alignItems: "center",
     borderRadius: 18,
     borderWidth: 1,
-    marginTop: spacing.xl,
-    paddingHorizontal: spacing.lg,
+    flex: 1,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md
   },
+  secondaryButtonLeft: {
+    marginRight: spacing.sm
+  },
+  actionsRow: {
+    flexDirection: "row",
+    marginTop: spacing.xl
+  },
   secondaryButtonText: {
-    fontSize: typography.button.fontSize,
+    fontSize: 15,
     fontWeight: typography.button.fontWeight,
     letterSpacing: typography.button.letterSpacing
   },
@@ -159,6 +227,14 @@ const styles = StyleSheet.create({
     left: -60,
     width: 260,
     height: 260,
+    borderRadius: 999
+  },
+  auraBottom: {
+    position: "absolute",
+    bottom: -160,
+    right: -60,
+    width: 280,
+    height: 280,
     borderRadius: 999
   }
 });

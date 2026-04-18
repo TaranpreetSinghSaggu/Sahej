@@ -11,7 +11,7 @@ export function getApiBaseUrlConfig() {
     return {
       apiBaseUrl: null,
       error:
-        "Missing EXPO_PUBLIC_API_BASE_URL. Add it to frontend-sahej/.env as a root backend URL like http://192.168.1.10:3000."
+        "Missing EXPO_PUBLIC_API_BASE_URL. Add it to frontend-sahej/.env as a root backend URL like http://192.168.5.45:3001."
     };
   }
 
