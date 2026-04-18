@@ -1,0 +1,317 @@
+{
+  "notes": {
+    "baseUrl": "http://localhost:3000",
+    "weeklyMirrorRequiresSharedSessionId": true,
+    "defaultSessionExample": "manual-demo-1",
+    "usage": "Send the request shown here and compare your live backend response with expectedResponse."
+  },
+  "health": {
+    "request": {
+      "method": "GET",
+      "path": "/health"
+    },
+    "expectedResponse": {
+      "ok": true
+    }
+  },
+  "reflect": {
+    "missingThought": {
+      "request": {
+        "method": "POST",
+        "path": "/reflect",
+        "body": {}
+      },
+      "expectedStatus": 400,
+      "expectedResponse": {
+        "error": "thought is required and must be a string"
+      }
+    },
+    "emptyThought": {
+      "request": {
+        "method": "POST",
+        "path": "/reflect",
+        "body": {
+          "thought": "   "
+        }
+      },
+      "expectedStatus": 400,
+      "expectedResponse": {
+        "error": "thought must not be empty"
+      }
+    },
+    "angerProve": {
+      "request": {
+        "method": "POST",
+        "path": "/reflect",
+        "headers": {
+          "x-session-id": "manual-demo-1"
+        },
+        "body": {
+          "thought": "I am angry and want to prove them wrong"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "verdict": "AUTOPILOT",
+        "primaryPattern": "ego",
+        "intensity": 4,
+        "mirrorLine": "This thought feels more reactive than reflective right now.",
+        "reframePrompt": "Pause and name what you actually need.",
+        "dopamineDrain": false
+      }
+    },
+    "reels": {
+      "request": {
+        "method": "POST",
+        "path": "/reflect",
+        "headers": {
+          "x-session-id": "manual-demo-1"
+        },
+        "body": {
+          "thought": "I spent 2 hours on reels again"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "verdict": "AUTOPILOT",
+        "primaryPattern": "fear",
+        "intensity": 4,
+        "mirrorLine": "This thought feels more reactive than reflective right now.",
+        "reframePrompt": "Pause and name what you actually need.",
+        "dopamineDrain": true
+      }
+    },
+    "calmIntentional": {
+      "request": {
+        "method": "POST",
+        "path": "/reflect",
+        "headers": {
+          "x-session-id": "manual-demo-1"
+        },
+        "body": {
+          "thought": "I want to respond calmly and do what is right"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "verdict": "AUTHENTIC",
+        "primaryPattern": "grounded",
+        "intensity": 2,
+        "mirrorLine": "This thought sounds grounded and more intentional.",
+        "reframePrompt": "Take the next step slowly and clearly.",
+        "dopamineDrain": false
+      }
+    }
+  },
+  "intercept": {
+    "passiveConsumption": {
+      "request": {
+        "method": "POST",
+        "path": "/intercept",
+        "body": {
+          "thought": "I am doomscrolling reels again"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "shouldInterrupt": true,
+        "reason": "passive_consumption",
+        "urgeLabels": [
+          "seeking_relief",
+          "avoiding_discomfort",
+          "seeking_control"
+        ],
+        "promptLine": "Pause before you feed the scroll."
+      }
+    },
+    "lateNight": {
+      "request": {
+        "method": "POST",
+        "path": "/intercept",
+        "body": {
+          "thought": "I want to message them",
+          "localHour": 1
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "shouldInterrupt": true,
+        "reason": "late_night_reactivity",
+        "urgeLabels": [
+          "seeking_relief",
+          "seeking_validation"
+        ],
+        "promptLine": "It is late. Wait for a steadier hour."
+      }
+    },
+    "compulsiveChecking": {
+      "request": {
+        "method": "POST",
+        "path": "/intercept",
+        "body": {
+          "thought": "I need to check if they replied again"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "shouldInterrupt": true,
+        "reason": "compulsive_checking",
+        "urgeLabels": [
+          "seeking_control",
+          "seeking_validation",
+          "seeking_relief"
+        ],
+        "promptLine": "Name the urge before you obey it."
+      }
+    }
+  },
+  "consequencePreview": {
+    "angerProve": {
+      "request": {
+        "method": "POST",
+        "path": "/consequence-preview",
+        "body": {
+          "thought": "I am angry and want to prove them wrong"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "autopilotOutcome": "You get a brief hit of certainty, then more friction.",
+        "alignedOutcome": "You protect your dignity and keep the response clean.",
+        "suggestedAction": "rewrite"
+      }
+    }
+  },
+  "voiceState": {
+    "calm": {
+      "request": {
+        "method": "POST",
+        "path": "/voice-state",
+        "body": {
+          "transcript": "I want to respond slowly and clearly."
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "stateLabel": "calm",
+        "toneSignal": "steady",
+        "mirrorLine": "Your tone sounds steadier and more available to choice.",
+        "nextStepPrompt": "Take the next step slowly and clearly."
+      }
+    },
+    "defensive": {
+      "request": {
+        "method": "POST",
+        "path": "/voice-state",
+        "body": {
+          "transcript": "I am fine, I just want to move on.",
+          "wordsPerMinute": 125,
+          "pauseCount": 0
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "stateLabel": "defensive",
+        "toneSignal": "guarded",
+        "mirrorLine": "Your words sound contained, but your guard is still up.",
+        "nextStepPrompt": "Name what you are protecting before you respond."
+      }
+    },
+    "urgent": {
+      "request": {
+        "method": "POST",
+        "path": "/voice-state",
+        "body": {
+          "transcript": "I need to send this right now",
+          "wordsPerMinute": 182,
+          "volumeTrend": "rising"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "stateLabel": "urgent",
+        "toneSignal": "activated",
+        "mirrorLine": "Your tone is moving faster than your clarity.",
+        "nextStepPrompt": "Pause before you speak from this speed."
+      }
+    }
+  },
+  "weeklyMirror": {
+    "emptySession": {
+      "request": {
+        "method": "GET",
+        "path": "/weekly-mirror",
+        "headers": {
+          "x-session-id": "fresh-session"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "dominantPattern": "none",
+        "strongestAuthenticPattern": "none",
+        "summary": "Start reflecting to reveal your weekly mirror.",
+        "recoveryMetrics": {
+          "totalReflections": 0,
+          "autopilotCount": 0,
+          "authenticCount": 0,
+          "dopamineDrainCount": 0,
+          "autopilotRate": 0
+        }
+      }
+    },
+    "afterThreeReflectCallsUsingSameSessionId": {
+      "requiredSequence": [
+        {
+          "method": "POST",
+          "path": "/reflect",
+          "headers": {
+            "x-session-id": "manual-demo-1"
+          },
+          "body": {
+            "thought": "I spent 2 hours on reels again"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/reflect",
+          "headers": {
+            "x-session-id": "manual-demo-1"
+          },
+          "body": {
+            "thought": "I feel jealous and small right now"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/reflect",
+          "headers": {
+            "x-session-id": "manual-demo-1"
+          },
+          "body": {
+            "thought": "I want to respond calmly and do what is right"
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/weekly-mirror",
+          "headers": {
+            "x-session-id": "manual-demo-1"
+          }
+        }
+      ],
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "dominantPattern": "fear",
+        "strongestAuthenticPattern": "grounded",
+        "summary": "This session keeps circling fear. Slow the loop before it hardens.",
+        "recoveryMetrics": {
+          "totalReflections": 3,
+          "autopilotCount": 2,
+          "authenticCount": 1,
+          "dopamineDrainCount": 1,
+          "autopilotRate": 0.67
+        }
+      }
+    }
+  }
+}

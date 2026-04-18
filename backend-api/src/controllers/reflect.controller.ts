@@ -1,26 +1,24 @@
 import { RequestHandler } from "express";
 
 import { AppError } from "../middleware/error.middleware";
-import { ReflectionResponse, ReflectRequestBody } from "../types/reflection";
-
-const mockReflection: ReflectionResponse = {
-  verdict: "AUTHENTIC",
-  primaryPattern: "grounded",
-  intensity: 2,
-  mirrorLine: "This sounds more reflective than reactive right now.",
-  reframePrompt: "What is the clearest next step you can take with calm intent?",
-  dopamineDrain: false
-};
+import { fallbackReflection } from "../utils/fallbackReflection";
+import { createMockReflection } from "../utils/mockReflection";
+import { normalizeThought } from "../utils/normalizeThought";
+import { getRequiredTrimmedText } from "../utils/requestValidation";
+import { getSessionId } from "../utils/sessionId";
+import { appendSessionReflectionEvent } from "../utils/sessionMemory";
+import { ReflectionResult, ReflectRequestBody } from "../types/reflection";
 
 const MAX_THOUGHT_LENGTH = 1000;
 
 export const reflect: RequestHandler<
   Record<string, never>,
-  ReflectionResponse,
+  ReflectionResult,
   ReflectRequestBody
 > = (req, res, next) => {
-  const { thought } = req.body;
+  let trimmedThought: string;
 
+<<<<<<< HEAD
   if (typeof thought !== "string") {
     return next(new AppError(400, "thought is required and must be a non-empty string"));
   }
@@ -36,4 +34,36 @@ export const reflect: RequestHandler<
   }
 
   return res.status(200).json(mockReflection);
+=======
+  try {
+    trimmedThought = getRequiredTrimmedText(req.body?.thought, "thought");
+  } catch (error) {
+    if (error instanceof AppError) {
+      return next(error);
+    }
+
+    return next(error);
+  }
+
+  try {
+    const normalizedThought = normalizeThought(trimmedThought);
+    const reflection = createMockReflection(normalizedThought);
+    const sessionId = getSessionId(req.headers["x-session-id"]);
+
+    appendSessionReflectionEvent(sessionId, {
+      timestamp: new Date().toISOString(),
+      thought: trimmedThought,
+      verdict: reflection.verdict,
+      primaryPattern: reflection.primaryPattern,
+      intensity: reflection.intensity,
+      dopamineDrain: reflection.dopamineDrain
+    });
+
+    return res.status(200).json(reflection);
+  } catch (error) {
+    console.error("Unexpected reflect fallback", error);
+
+    return res.status(200).json(fallbackReflection());
+  }
+>>>>>>> main
 };
