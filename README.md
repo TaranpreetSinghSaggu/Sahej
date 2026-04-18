@@ -5,7 +5,7 @@ Sahej is a hackathon project with two apps:
 - `frontend-sahej` (Expo Router + React Native + TypeScript)
 - `backend-api` (Node.js + TypeScript + Express)
 
-## DEMO VIDEO (BIG)
+## DEMO VIDEO (Imp)
 
 [Watch the full demo video on Google Drive](https://drive.google.com/file/d/1K5IWKzs2gXbZqVTMEmKmiHCkRpVFoTQB/view?usp=sharing)
 
