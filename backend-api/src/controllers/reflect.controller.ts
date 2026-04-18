@@ -12,6 +12,8 @@ const mockReflection: ReflectionResponse = {
   dopamineDrain: false
 };
 
+const MAX_THOUGHT_LENGTH = 1000;
+
 export const reflect: RequestHandler<
   Record<string, never>,
   ReflectionResponse,
@@ -19,8 +21,18 @@ export const reflect: RequestHandler<
 > = (req, res, next) => {
   const { thought } = req.body;
 
-  if (typeof thought !== "string" || thought.trim().length === 0) {
+  if (typeof thought !== "string") {
     return next(new AppError(400, "thought is required and must be a non-empty string"));
+  }
+
+  const trimmedThought = thought.trim();
+
+  if (trimmedThought.length === 0) {
+    return next(new AppError(400, "thought is required and must be a non-empty string"));
+  }
+
+  if (trimmedThought.length > MAX_THOUGHT_LENGTH) {
+    return next(new AppError(400, "thought must be 1000 characters or fewer"));
   }
 
   return res.status(200).json(mockReflection);

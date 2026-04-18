@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Sahej",
+    "slug": "frontend-sahej",
+    "scheme": "sahej",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
